@@ -399,7 +399,7 @@ if 'data_loaded' not in st.session_state:
 def main():
     # Header
     st.markdown('<h1 class="main-header">GQ Chart Generator</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: center; color: #666; font-size: 1.1rem;">Create publication-quality charts for Adobe InDesign</p>', unsafe_allow_html=True)
+   
     
     # Sidebar for file upload and data info
     with st.sidebar:
@@ -442,7 +442,7 @@ def main():
             sample_data = pd.DataFrame({
                 'vendor': ['Vendor A', 'Vendor A', 'Vendor A', 'Vendor B', 'Vendor B', 'Vendor B','Vendor C', 'Vendor C', 'Vendor C'],
                 'sum': [2.5, 1.8, 2.1,2.0, 1.2, 2.3,2.4, 1.0, 2.3],
-                'criteria': ['Market Share', 'Market Share', 'Market Share', 'Market Share', 'Market Share', 'Market Share', 'Market Share', 'Market Share', 'Market Share'],
+                'criteria': ['Market share', 'Market share', 'Market share', 'Market share', 'Market share', 'Market share', 'Market share', 'Market share', 'Market share'],
                 'axis': ['Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum'],
                 'year': [2025, 2025, 2025,2025,2025,2025,2025,2025,2025]
             })
@@ -638,20 +638,24 @@ def main():
         st.markdown("""
         ## Welcome to GQ Chart Generator
         
-        This tool creates publication-quality GQ charts for Adobe InDesign. Perfect for market research and competitive analysis visualizations.
+        This tool creates publication-quality GQ charts for Adobe InDesign.
         
-        ### Getting Started:
+        #### Getting Started:
         1. Upload your data file (Excel or CSV) using the sidebar
         2. Load the data to validate and preview
         3. Generate charts individually or in batch
         4. Download in multiple formats (PNG, SVG, PDF)
+        5. Download the data file to send to publishing team
         
-        ### Features:
-        - Publication-quality output optimized for Adobe InDesign
-        - Smart batch processing - only creates charts for actual data combinations
-        - Multiple formats - PNG (preview), SVG (vector), PDF (print)
-        - Professional styling - exact color matching and typography
+        If you receive feedback from the publishing team, feel free to make changes to the input file and re-run. The tool is set up to enable these changes. 
         
+        #### Tips for success with input data:
+                    
+        - Vendor names should be unique and consistent across all rows
+        - Scores should be a value between 0 and 3, to 1 decimal place
+        - criteria should be a string, in sentence case (e.g. Market share)
+        - Axis should be one of 'Momentum' or 'Capabilities' 
+        - Year should be in YYYY format (e.g. 2025)
         """)
 
 if __name__ == "__main__":
