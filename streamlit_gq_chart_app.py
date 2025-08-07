@@ -238,17 +238,22 @@ class StreamlitGQGenerator:
         
         # Create charts
         if capabilities_data:
-            self._create_GQ(ax1, capabilities_data, 'Capabilities', self.colors['capabilities'])
+            self._create_GQ(ax1, capabilities_data, 'Top capabilities', self.colors['capabilities'])
         else:
-            self._create_empty_chart(ax1, 'Capabilities')
+            self._create_empty_chart(ax1, 'Top capabilities')
             
         if momentum_data:
-            self._create_GQ(ax2, momentum_data, 'Momentum', self.colors['momentum'])
+            self._create_GQ(ax2, momentum_data, 'Top momentum', self.colors['momentum'])
         else:
-            self._create_empty_chart(ax2, 'Momentum')
+            self._create_empty_chart(ax2, 'Top momentum')
         
         # Create legend
         self._create_legend(fig)
+        
+        # Add explanatory text below the charts
+        fig.text(0.5, 0.0001, 'Charts show top 8 scoring criteria for each vendor', 
+                fontsize=9, ha='center', va='bottom',
+                color=self.colors['text_secondary'], style='italic', fontproperties=self.custom_font)
         
         plt.tight_layout()
         return fig
@@ -262,7 +267,7 @@ class StreamlitGQGenerator:
         n_items = len(data)
         y_positions = np.arange(n_items)
         
-        ax.set_xlim(0, 3.05)
+        ax.set_xlim(0, 3.2)
         ax.set_ylim(-0.5, n_items - 0.5)
         
         # Draw elements
@@ -304,7 +309,20 @@ class StreamlitGQGenerator:
         for item in data:
             criteria = item['criteria'].strip()
             if criteria:
-                criteria = criteria[0].upper() + criteria[1:].lower()
+                # Smart case processing - preserve acronyms, sentence case for others
+                words = criteria.split(' ')
+                processed_words = []
+                for i, word in enumerate(words):
+                    # Check if word is likely an acronym (all caps or 2-3 letters)
+                    if word.isupper() or (len(word) <= 3 and word.isalpha()):
+                        processed_words.append(word)  # Keep acronyms as-is
+                    else:
+                        # Apply sentence case to non-acronyms (first letter only if it's the first word)
+                        if i == 0:
+                            processed_words.append(word[0].upper() + word[1:].lower())
+                        else:
+                            processed_words.append(word.lower())
+                criteria = ' '.join(processed_words)
             criteria = criteria.replace(' and ', ' & ')
             if len(criteria) > 20:
                 words = criteria.split(' ')
@@ -358,15 +376,15 @@ class StreamlitGQGenerator:
     def _create_legend(self, fig):
         """Create legend"""
         legend_elements = [
-            patches.Patch(facecolor=self.colors['range_bg'], edgecolor='none', label='Field Range'),
-            Line2D([0], [0], color=self.colors['field_line'], lw=2, label='Field Min/Max'),
+            patches.Patch(facecolor=self.colors['range_bg'], edgecolor='none', label='Field range'),
+            Line2D([0], [0], color=self.colors['field_line'], lw=2, label='Field min/max'),
             Line2D([0], [0], marker='o', color='w', label='Capabilities',
                    markerfacecolor=self.colors['capabilities'], markersize=10, lw=0),
             Line2D([0], [0], marker='o', color='w', label='Momentum',
                    markerfacecolor=self.colors['momentum'], markersize=10, lw=0),
         ]
         
-        leg = fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.08),
+        leg = fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.87),
                   ncol=4, frameon=False, fontsize=9)
         for text in leg.get_texts():
             text.set_fontproperties(self.custom_font)
@@ -563,17 +581,17 @@ def main():
                                     png_buffer = BytesIO()
                                     fig.savefig(png_buffer, format='png', bbox_inches='tight', 
                                                facecolor='white', dpi=300)
-                                    zip_file.writestr(f"{clean_vendor}_{year}_chart.png", png_buffer.getvalue())
+                                    zip_file.writestr(f"png/{clean_vendor}_{year}_chart.png", png_buffer.getvalue())
                                     
                                     # Save SVG to zip
                                     svg_buffer = BytesIO()
                                     fig.savefig(svg_buffer, format='svg', bbox_inches='tight', facecolor='white')
-                                    zip_file.writestr(f"{clean_vendor}_{year}_chart.svg", svg_buffer.getvalue())
+                                    zip_file.writestr(f"svg/{clean_vendor}_{year}_chart.svg", svg_buffer.getvalue())
                                     
                                     # Save PDF to zip
                                     pdf_buffer = BytesIO()
                                     fig.savefig(pdf_buffer, format='pdf', bbox_inches='tight', facecolor='white')
-                                    zip_file.writestr(f"{clean_vendor}_{year}_chart.pdf", pdf_buffer.getvalue())
+                                    zip_file.writestr(f"pdf/{clean_vendor}_{year}_chart.pdf", pdf_buffer.getvalue())
                                     
                                     plt.close(fig)
                                     
@@ -632,14 +650,8 @@ def main():
         - Publication-quality output optimized for Adobe InDesign
         - Smart batch processing - only creates charts for actual data combinations
         - Multiple formats - PNG (preview), SVG (vector), PDF (print)
-        - Corporate-friendly - no installation required, browser-based
         - Professional styling - exact color matching and typography
         
-        ### Perfect for Corporate Environments:
-        - No software installation required
-        - Works in any web browser
-        - Easy to share with colleagues
-        - IT department approved approach
         """)
 
 if __name__ == "__main__":
