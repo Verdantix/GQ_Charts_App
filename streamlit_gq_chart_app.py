@@ -95,9 +95,17 @@ class StreamlitGQGenerator:
             if uploaded_file.name.lower().endswith('.csv'):
                 self.data = pd.read_csv(uploaded_file)
             elif uploaded_file.name.lower().endswith(('.xlsx', '.xls')):
-                self.data = pd.read_excel(uploaded_file)
+                # Try to read 'OutputData' sheet first, skip first 2 rows
+                try:
+                    self.data = pd.read_excel(uploaded_file, sheet_name='OutputData', skiprows=2)
+                except ValueError:
+                    # If 'OutputData' sheet doesn't exist, read first sheet
+                    self.data = pd.read_excel(uploaded_file)
             else:
                 raise ValueError("Unsupported file type. Please upload CSV or Excel file.")
+
+            # Convert all column names to strings to handle Excel formatting issues
+            self.data.columns = [str(col) for col in self.data.columns]
 
             # Step 1: Try to find standard format (case/space agnostic)
             required_columns = ['vendor', 'sum', 'criteria', 'axis', 'year']
@@ -129,12 +137,24 @@ class StreamlitGQGenerator:
                 id_vars = [id_var_map[req] for req in required_id_vars]
                 vendor_columns = [col for col in self.data.columns if col not in id_vars]
                 if vendor_columns:
-                    melted = pd.melt(self.data, id_vars=id_vars, value_vars=vendor_columns,
+                    # Filter out vendor columns that would result in '0' or 'Unnamed:' values
+                    filtered_vendor_columns = []
+                    for col in vendor_columns:
+                        # Check if this column would result in problematic vendor names
+                        if col != '0' and not col.startswith('Unnamed:'):
+                            filtered_vendor_columns.append(col)
+                    
+                    if not filtered_vendor_columns:
+                        raise ValueError(f"No valid vendor columns found after filtering. Original vendor columns: {vendor_columns}")
+                    
+                    melted = pd.melt(self.data, id_vars=id_vars, value_vars=filtered_vendor_columns,
                                      var_name='vendor', value_name='sum')
                     # Rename id_vars to expected names
                     melted.rename(columns={id_var_map['criteria']: 'criteria',
                                            id_var_map['axis']: 'axis',
                                            id_var_map['year']: 'year'}, inplace=True)
+                    # Filter out rows where vendor is '0' or 'Unnamed:' (phantom rows from Excel)
+                    melted = melted[(melted['vendor'] != '0') & (~melted['vendor'].str.startswith('Unnamed:', na=False))]
                     self.data = melted
                     self.data['sum'] = pd.to_numeric(self.data['sum'], errors='coerce').fillna(0)
                     # Ensure all required columns are present
