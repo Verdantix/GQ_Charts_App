@@ -98,19 +98,54 @@ class StreamlitGQGenerator:
                 self.data = pd.read_excel(uploaded_file)
             else:
                 raise ValueError("Unsupported file type. Please upload CSV or Excel file.")
-            
-            # Validate required columns
+
+            # Step 1: Try to find standard format (case/space agnostic)
             required_columns = ['vendor', 'sum', 'criteria', 'axis', 'year']
-            missing_columns = [col for col in required_columns if col not in self.data.columns]
-            
-            if missing_columns:
-                raise ValueError(f"Missing required columns: {missing_columns}")
-                
-            # Convert sum to numeric, handling string values
-            self.data['sum'] = pd.to_numeric(self.data['sum'], errors='coerce').fillna(0)
-            
-            return True, "Data loaded successfully!"
-            
+            col_map = {}
+            for req in required_columns:
+                for col in self.data.columns:
+                    if col.strip().lower() == req:
+                        col_map[req] = col
+                        break
+            columns_set = set([c.strip().lower() for c in self.data.columns])
+            missing_columns = [col for col in required_columns if col not in columns_set]
+
+            if not missing_columns:
+                # Standard format: normalize key columns only
+                self.data.rename(columns={col_map[k]: k for k in col_map}, inplace=True)
+                self.data['sum'] = pd.to_numeric(self.data['sum'], errors='coerce').fillna(0)
+                return True, "Data loaded successfully!"
+            else:
+                # Step 2: Try wide format (case/space agnostic for id_vars)
+                required_id_vars = ['criteria', 'axis', 'year']
+                id_var_map = {}
+                for req in required_id_vars:
+                    for col in self.data.columns:
+                        if col.strip().lower() == req:
+                            id_var_map[req] = col
+                            break
+                    else:
+                        raise ValueError(f"Required column '{req}' not found in file columns: {self.data.columns.tolist()}")
+                id_vars = [id_var_map[req] for req in required_id_vars]
+                vendor_columns = [col for col in self.data.columns if col not in id_vars]
+                if vendor_columns:
+                    melted = pd.melt(self.data, id_vars=id_vars, value_vars=vendor_columns,
+                                     var_name='vendor', value_name='sum')
+                    # Rename id_vars to expected names
+                    melted.rename(columns={id_var_map['criteria']: 'criteria',
+                                           id_var_map['axis']: 'axis',
+                                           id_var_map['year']: 'year'}, inplace=True)
+                    self.data = melted
+                    self.data['sum'] = pd.to_numeric(self.data['sum'], errors='coerce').fillna(0)
+                    # Ensure all required columns are present
+                    columns_set = set(self.data.columns)
+                    for col in ['vendor', 'sum', 'criteria', 'axis', 'year']:
+                        if col not in columns_set:
+                            raise ValueError(f"Column '{col}' missing after melting. Columns found: {self.data.columns.tolist()}")
+                    return True, "Wide-format data loaded and transformed successfully!"
+                else:
+                    raise ValueError(f"No vendor columns found in wide-format data. Columns found: {self.data.columns.tolist()}")
+
         except Exception as e:
             return False, f"Error loading file: {str(e)}"
     
@@ -438,16 +473,30 @@ def main():
         
         # Show sample data format
         if not st.session_state.data_loaded:
-            st.markdown("### Required Data Format")
-            sample_data = pd.DataFrame({
-                'vendor': ['Vendor A', 'Vendor A', 'Vendor A', 'Vendor B', 'Vendor B', 'Vendor B','Vendor C', 'Vendor C', 'Vendor C'],
-                'sum': [2.5, 1.8, 2.1,2.0, 1.2, 2.3,2.4, 1.0, 2.3],
-                'criteria': ['Market share', 'Market share', 'Market share', 'Market share', 'Market share', 'Market share', 'Market share', 'Market share', 'Market share'],
-                'axis': ['Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum', 'Momentum'],
-                'year': [2025, 2025, 2025,2025,2025,2025,2025,2025,2025]
+            st.markdown("### Required Data Formats")
+            st.markdown("This app now supports two input formats:")
+            st.markdown("**1. Standard (long) format:** Each row is a vendor/criteria/axis/year/score combination.")
+            sample_data_long = pd.DataFrame({
+                'vendor': ['Vendor A', 'Vendor B', 'Vendor C'],
+                'sum': [2.5, 2.0, 2.4],
+                'criteria': ['Market share']*3,
+                'axis': ['Momentum']*3,
+                'year': [2025]*3
             })
-            st.dataframe(sample_data, use_container_width=True)
-            st.caption("Your file should have these exact column names")
+            st.dataframe(sample_data_long, use_container_width=True)
+            st.caption("Your file should have these exact column names for standard format.")
+
+            st.markdown("**2. Wide format:** Each vendor is a column, with scores as values. Columns must include 'criteria', 'axis', 'year', and one or more vendor columns.")
+            sample_data_wide = pd.DataFrame({
+                'criteria': ['Market share', 'Market share'],
+                'axis': ['Momentum', 'Momentum'],
+                'year': [2025, 2026],
+                'Vendor A': [2.5, 2.6],
+                'Vendor B': [2.0, 2.1],
+                'Vendor C': [2.4, 2.5]
+            })
+            st.dataframe(sample_data_wide, use_container_width=True)
+            st.caption("Wide format: 'criteria', 'axis', 'year' columns plus one or more vendor columns. The app will automatically convert this format.")
     
     # Main content area
     if st.session_state.data_loaded:
