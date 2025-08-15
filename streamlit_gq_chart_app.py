@@ -1,4 +1,4 @@
-# streamlit_GQ_app.py - Complete Streamlit Web App
+# streamlit_GQ_app.py - Complete Streamlit Web App aug15th 2025
 """
 Streamlit web app for GQ Chart Generator
 Run with: streamlit run streamlit_GQ_app.py
@@ -249,7 +249,8 @@ class StreamlitGQGenerator:
         
         # Create matplotlib figure
         plt.rcParams.update({
-            'font.size': 10,
+            'font.size': 11,
+            'font.weight': 'bold',
             'axes.linewidth': 0.8,
             'axes.spines.left': True,
             'axes.spines.bottom': True,
@@ -265,7 +266,7 @@ class StreamlitGQGenerator:
             'axes.facecolor': 'white'
         })
         
-        fig = plt.figure(figsize=(12, 8), dpi=150, facecolor='white')
+        fig = plt.figure(figsize=(16, 8), dpi=150, facecolor='white')
         
         # Title and layout
         title_height = 0.12
@@ -275,21 +276,18 @@ class StreamlitGQGenerator:
         chart_height = 1 - title_height - legend_height - margin_top - margin_bottom
         
         # Main title
-        fig.text(0.5, 0.95, f'{vendor} Performance vs. Field ({year})', 
-                fontsize=18, fontweight='normal', ha='center', va='top',
-                color=self.colors['text_primary'], fontproperties=self.custom_font)
+    
         
         # Chart areas
-        left_margin = 0.08
-        right_margin = 0.08
-        center_gap = 0.06
+        left_margin = 0.06
+        right_margin = 0.06
+        center_gap = 0.12
         chart_width = (1 - left_margin - right_margin - center_gap) / 2
         chart_bottom = margin_bottom
-        momentum_push = 0.1
         
         # Create subplots
         ax1 = fig.add_axes([left_margin, chart_bottom, chart_width, chart_height])
-        ax2 = fig.add_axes([left_margin + chart_width + center_gap + momentum_push, chart_bottom, chart_width, chart_height])
+        ax2 = fig.add_axes([left_margin + chart_width + center_gap + 0.02, chart_bottom, chart_width, chart_height])
         
         # Create charts
         if capabilities_data:
@@ -307,8 +305,8 @@ class StreamlitGQGenerator:
         
         # Add explanatory text below the charts
         fig.text(0.5, 0.0001, 'Charts show top 8 scoring criteria for each vendor', 
-                fontsize=9, ha='center', va='bottom',
-                color=self.colors['text_secondary'], style='italic', fontproperties=self.custom_font)
+                fontsize=10, ha='center', va='bottom',
+                color=self.colors['text_secondary'], style='italic', fontproperties=self.custom_font, weight='bold')
         
         plt.tight_layout()
         return fig
@@ -354,10 +352,10 @@ class StreamlitGQGenerator:
         
         # Configure axes
         ax.set_xticks([0, 1, 2, 3])
-        ax.set_xticklabels(['0', '1', '2', '3'], fontsize=9, 
-                          color=self.colors['text_secondary'], fontproperties=self.custom_font)
-        ax.set_xlabel('Criteria-level score', fontsize=10, 
-                     color=self.colors['text_primary'], labelpad=8, fontproperties=self.custom_font)
+        ax.set_xticklabels(['0', '1', '2', '3'], fontsize=10, 
+                          color=self.colors['text_secondary'], fontproperties=self.custom_font, weight='bold')
+        ax.set_xlabel('Criteria-level score', fontsize=11, 
+                     color=self.colors['text_primary'], labelpad=8, fontproperties=self.custom_font, weight='bold')
         
         # Y-axis labels
         y_labels = []
@@ -398,10 +396,12 @@ class StreamlitGQGenerator:
                 y_labels.append(criteria)
         
         ax.set_yticks(y_positions)
-        ax.set_yticklabels(y_labels, fontsize=9, ha='right',
-                          color=self.colors['text_primary'], fontproperties=self.custom_font)
-        ax.set_title(chart_type, fontsize=12, fontweight='normal',
-                    color=self.colors['text_primary'], pad=15, fontproperties=self.custom_font)
+        ax.set_yticklabels(y_labels, fontsize=12, ha='right',
+                          color=self.colors['text_primary'], fontproperties=self.custom_font, weight='bold')
+        ax.set_title(chart_type, fontsize=13, fontweight='bold',
+                    color=self.colors['text_primary'], 
+                    pad=15, 
+                    fontproperties=self.custom_font)
         
         # Style spines
         ax.spines['top'].set_visible(False)
@@ -417,11 +417,11 @@ class StreamlitGQGenerator:
         """Create empty chart placeholder"""
         ax.text(0.5, 0.5, f'No {chart_type} data available', 
                transform=ax.transAxes, ha='center', va='center',
-               fontsize=11, color=self.colors['text_secondary'],
-               style='italic', fontproperties=self.custom_font)
+               fontsize=12, color=self.colors['text_secondary'],
+               style='italic', fontproperties=self.custom_font, weight='bold')
         ax.set_xlim(0, 3)
         ax.set_ylim(0, 1)
-        ax.set_title(chart_type, fontsize=12, fontweight='normal',
+        ax.set_title(chart_type, fontsize=13, fontweight='bold',
                     color=self.colors['text_primary'], pad=15, fontproperties=self.custom_font)
         for spine in ax.spines.values():
             spine.set_visible(False)
@@ -432,7 +432,7 @@ class StreamlitGQGenerator:
         """Create legend"""
         legend_elements = [
             patches.Patch(facecolor=self.colors['range_bg'], edgecolor='none', label='Field range'),
-            Line2D([0], [0], color=self.colors['field_line'], lw=2, label='Field min/max'),
+            Line2D([0], [0], marker='|', color=self.colors['field_line'], lw=0,markersize=10, label='Field min/max'),
             Line2D([0], [0], marker='o', color='w', label='Capabilities',
                    markerfacecolor=self.colors['capabilities'], markersize=10, lw=0),
             Line2D([0], [0], marker='o', color='w', label='Momentum',
@@ -440,9 +440,10 @@ class StreamlitGQGenerator:
         ]
         
         leg = fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.87),
-                  ncol=4, frameon=False, fontsize=9)
+                  ncol=4, frameon=False, fontsize=10)
         for text in leg.get_texts():
             text.set_fontproperties(self.custom_font)
+            text.set_weight('bold')
 
 # Initialize session state
 if 'generator' not in st.session_state:
