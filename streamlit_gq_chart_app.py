@@ -702,6 +702,88 @@ def main():
                 st.markdown("Axis Distribution:")
                 axis_counts = data['axis'].value_counts()
                 st.bar_chart(axis_counts)
+
+            # Guidance: Top 8 criteria per vendor
+            st.markdown("### Top 8 criteria per vendor (guidance)")
+            st.caption("Use this to quickly sense‑check the chart outputs. Lists show the top 8 scoring criteria for the selected vendor and year, with field min/max for context.")
+
+            colv, coly = st.columns(2)
+            with colv:
+                preview_vendor = st.selectbox("Select Vendor (preview)", vendors, key="preview_vendor")
+            with coly:
+                preview_year = st.selectbox("Select Year (preview)", years, key="preview_year")
+
+            try:
+                preview_year_data = data[data['year'] == preview_year]
+                if preview_vendor not in set(preview_year_data['vendor'].unique()):
+                    st.info(f"No rows found for {preview_vendor} in {preview_year}. Select another combination.")
+                    raise ValueError("No vendor/year data")
+                cap_stats = st.session_state.generator.process_axis_data(preview_year_data, ['Capabilities', 'Capability'], preview_vendor)
+                mom_stats = st.session_state.generator.process_axis_data(preview_year_data, ['Momentum'], preview_vendor)
+
+                colc, colm = st.columns(2)
+                with colc:
+                    st.markdown(f"**Capabilities — top {len(cap_stats)}**")
+                    if cap_stats:
+                        cap_df = pd.DataFrame([
+                            {
+                                'Rank': i + 1,
+                                'Criteria': item['criteria'],
+                                'Vendor score': round(float(item['vendor_score']), 2),
+                                'Field min': round(float(item['min_score']), 2),
+                                'Field max': round(float(item['max_score']), 2)
+                            }
+                            for i, item in enumerate(cap_stats)
+                        ])
+                        st.dataframe(cap_df, use_container_width=True)
+                    else:
+                        st.info("No Capabilities data found for this vendor/year.")
+
+                with colm:
+                    st.markdown(f"**Momentum — top {len(mom_stats)}**")
+                    if mom_stats:
+                        mom_df = pd.DataFrame([
+                            {
+                                'Rank': i + 1,
+                                'Criteria': item['criteria'],
+                                'Vendor score': round(float(item['vendor_score']), 2),
+                                'Field min': round(float(item['min_score']), 2),
+                                'Field max': round(float(item['max_score']), 2)
+                            }
+                            for i, item in enumerate(mom_stats)
+                        ])
+                        st.dataframe(mom_df, use_container_width=True)
+                    else:
+                        st.info("No Momentum data found for this vendor/year.")
+
+            except Exception as e:
+                st.warning(f"Unable to compute top criteria preview: {str(e)}")
+
+            # Optional: Quick summaries for all vendor/year combinations
+            with st.expander("Quick summaries for all vendors/years"):
+                for combo in actual_combinations:
+                    v = combo['vendor']
+                    y = combo['year']
+                    combo_year_data = data[data['year'] == y]
+                    cap = st.session_state.generator.process_axis_data(combo_year_data, ['Capabilities', 'Capability'], v)
+                    mom = st.session_state.generator.process_axis_data(combo_year_data, ['Momentum'], v)
+
+                    st.markdown(f"**{v} ({y})**")
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        if cap:
+                            st.markdown(
+                                ", ".join([item['criteria'] for item in cap])
+                            )
+                        else:
+                            st.caption("No Capabilities data")
+                    with col_b:
+                        if mom:
+                            st.markdown(
+                                ", ".join([item['criteria'] for item in mom])
+                            )
+                        else:
+                            st.caption("No Momentum data")
     
     else:
         # Welcome screen
