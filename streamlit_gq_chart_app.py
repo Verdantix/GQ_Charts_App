@@ -365,9 +365,12 @@ class StreamlitGQGenerator:
                 # Smart case processing - preserve acronyms, sentence case for others
                 words = criteria.split(' ')
                 processed_words = []
+                # Common acronyms to preserve
+                acronyms = {'API', 'APIs', 'UI', 'UX', 'AI', 'ML', 'IT', 'CRM', 'ERP', 'ROI', 'KPI', 'SaaS', 'IoT', 'SDK', 'REST'}
+                
                 for i, word in enumerate(words):
-                    # Check if word is likely an acronym (all caps or 2-3 letters)
-                    if word.isupper() or (len(word) <= 3 and word.isalpha()):
+                    # Check if word is likely an acronym (all caps, 2-3 letters, or in our acronym list)
+                    if word.isupper() or (len(word) <= 3 and word.isalpha()) or word in acronyms:
                         processed_words.append(word)  # Keep acronyms as-is
                     else:
                         # Apply sentence case to non-acronyms (first letter only if it's the first word)
