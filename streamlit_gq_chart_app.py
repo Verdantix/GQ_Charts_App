@@ -367,10 +367,22 @@ class StreamlitGQGenerator:
                 processed_words = []
                 # Common acronyms to preserve
                 acronyms = {'API', 'APIs', 'UI', 'UX', 'AI', 'ML', 'IT', 'CRM', 'ERP', 'ROI', 'KPI', 'SaaS', 'IoT', 'SDK', 'REST'}
-                
+
                 for i, word in enumerate(words):
+                    # Check if word contains hyphens (e.g., "AI-First")
+                    if '-' in word:
+                        # Process each part of hyphenated word separately
+                        parts = word.split('-')
+                        processed_parts = []
+                        for j, part in enumerate(parts):
+                            if part.isupper() or (len(part) <= 3 and part.isalpha()) or part in acronyms:
+                                processed_parts.append(part)  # Keep acronyms as-is
+                            else:
+                                # Apply lowercase to non-acronyms in hyphenated words
+                                processed_parts.append(part.lower())
+                        processed_words.append('-'.join(processed_parts))
                     # Check if word is likely an acronym (all caps, 2-3 letters, or in our acronym list)
-                    if word.isupper() or (len(word) <= 3 and word.isalpha()) or word in acronyms:
+                    elif word.isupper() or (len(word) <= 3 and word.isalpha()) or word in acronyms:
                         processed_words.append(word)  # Keep acronyms as-is
                     else:
                         # Apply sentence case to non-acronyms (first letter only if it's the first word)
