@@ -345,10 +345,9 @@ class StreamlitGQGenerator:
                    [y_pos - marker_height, y_pos + marker_height],
                    color=self.colors['field_markers'], linewidth=2, zorder=3)
             
-            # Vendor score
-            if item['vendor_score'] != 0:
-                ax.scatter([item['vendor_score']], [y_pos], s=135, c=dot_color, 
-                          edgecolors=dot_color, linewidths=1.5, alpha=1, zorder=4)
+            # Vendor score (plot all scores including 0)
+            ax.scatter([item['vendor_score']], [y_pos], s=135, c=dot_color,
+                      edgecolors=dot_color, linewidths=1.5, alpha=1, zorder=4)
         
         # Configure axes
         ax.set_xticks([0, 1, 2, 3])
