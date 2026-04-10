@@ -68,7 +68,8 @@ html, body, [class*='css'], .stApp, .stTextInput, .stButton, .stSelectbox, .stDa
 class StreamlitGQGenerator:
     def __init__(self):
         self.data = None
-        self.MAX_CRITERIA_DISPLAY = 8
+        self.MAX_CRITERIA_DISPLAY = 5
+        self.non_participation_vendors = set()  # Track vendors with Non-Participation flag
         
         # Professional color palette - exact match to target
         self.colors = {
@@ -76,7 +77,7 @@ class StreamlitGQGenerator:
             'momentum': '#54F2BF',        # Bright teal
             'field_line': '#9E9E9E',      # Medium gray for connecting lines
             'field_markers': '#757575',   # Darker gray for min/max markers
-            'range_bg': '#F5F5F5',        # Very light gray for range background
+            'range_bg': '#E8E8E8',        # Light gray for range background
             'text_primary': '#212121',    # Dark gray for primary text
             'text_secondary': '#616161',  # Medium gray for secondary text
             'grid': '#E0E0E0',           # Light gray for grid
@@ -122,6 +123,11 @@ class StreamlitGQGenerator:
                 # Standard format: normalize key columns only
                 self.data.rename(columns={col_map[k]: k for k in col_map}, inplace=True)
                 self.data['sum'] = pd.to_numeric(self.data['sum'], errors='coerce').fillna(0)
+                # Strip whitespace from string columns
+                for col in ['vendor', 'criteria', 'axis']:
+                    self.data[col] = self.data[col].astype(str).str.strip()
+                # Extract non-participation vendors
+                self._extract_non_participation_vendors(uploaded_file)
                 return True, "Data loaded successfully!"
             else:
                 # Step 2: Try wide format (case/space agnostic for id_vars)
@@ -157,18 +163,65 @@ class StreamlitGQGenerator:
                     melted = melted[(melted['vendor'] != '0') & (~melted['vendor'].str.startswith('Unnamed:', na=False))]
                     self.data = melted
                     self.data['sum'] = pd.to_numeric(self.data['sum'], errors='coerce').fillna(0)
+                    # Strip whitespace from string columns
+                    for col in ['vendor', 'criteria', 'axis']:
+                        self.data[col] = self.data[col].astype(str).str.strip()
                     # Ensure all required columns are present
                     columns_set = set(self.data.columns)
                     for col in ['vendor', 'sum', 'criteria', 'axis', 'year']:
                         if col not in columns_set:
                             raise ValueError(f"Column '{col}' missing after melting. Columns found: {self.data.columns.tolist()}")
+                    # Extract non-participation vendors
+                    self._extract_non_participation_vendors(uploaded_file)
                     return True, "Wide-format data loaded and transformed successfully!"
                 else:
                     raise ValueError(f"No vendor columns found in wide-format data. Columns found: {self.data.columns.tolist()}")
 
         except Exception as e:
             return False, f"Error loading file: {str(e)}"
-    
+
+    def _extract_non_participation_vendors(self, uploaded_file=None):
+        """Extract vendors with Non-Participation Vendor Flag = 1 from row 2 of Excel"""
+        self.non_participation_vendors = set()
+
+        if uploaded_file is None:
+            return
+
+        try:
+            # Reset file pointer
+            uploaded_file.seek(0)
+            # Read first 3 rows without skipping to get the flag row and header row
+            raw_df = pd.read_excel(uploaded_file, sheet_name='OutputData', nrows=3, header=None)
+
+            # Row 1 (index 1) contains the Non-Participation Vendor Flag values
+            # Row 2 (index 2) contains the vendor names as headers
+            flag_row = raw_df.iloc[1]
+            header_row = raw_df.iloc[2]
+
+            # Find vendors where the flag is 1
+            for col_idx in range(len(header_row)):
+                vendor_name = header_row.iloc[col_idx]
+                flag_value = flag_row.iloc[col_idx]
+
+                # Check if this is a vendor column (not Year, Axis, Criteria, Average, etc.)
+                if pd.notna(vendor_name) and isinstance(vendor_name, str):
+                    vendor_name = vendor_name.strip()
+                    # Skip non-vendor columns
+                    if vendor_name.lower() in ['year', 'axis', 'criteria', 'average', 'nan', '']:
+                        continue
+                    # Check if flag is 1
+                    try:
+                        if pd.to_numeric(flag_value, errors='coerce') == 1:
+                            self.non_participation_vendors.add(vendor_name)
+                    except:
+                        pass
+
+            # Reset file pointer for any subsequent reads
+            uploaded_file.seek(0)
+        except Exception:
+            # If extraction fails, continue without flags
+            pass
+
     def get_vendors(self):
         """Get list of available vendors"""
         if self.data is not None:
@@ -190,9 +243,9 @@ class StreamlitGQGenerator:
         grouped = self.data.groupby(['vendor', 'year'])
         
         for (vendor, year), group in grouped:
-            # Check if this combination has meaningful data
-            caps_data = group[group['axis'].isin(['Capabilities', 'Capability'])]
-            momentum_data = group[group['axis'] == 'Momentum']
+            # Check if this combination has meaningful data (case-insensitive, handle NA)
+            caps_data = group[group['axis'].fillna('').str.lower().isin(['capabilities', 'capability'])]
+            momentum_data = group[group['axis'].fillna('').str.lower() == 'momentum']
             
             if len(caps_data) > 0 or len(momentum_data) > 0:
                 combinations.append({
@@ -208,7 +261,9 @@ class StreamlitGQGenerator:
     
     def process_axis_data(self, data, axis_types, selected_vendor):
         """Process data for capabilities or momentum"""
-        axis_data = data[data['axis'].isin(axis_types)]
+        # Case-insensitive axis matching, handle NA values
+        axis_types_lower = [a.lower() for a in axis_types]
+        axis_data = data[data['axis'].fillna('').str.lower().isin(axis_types_lower)]
         criteria_stats = []
         
         for criteria in axis_data['criteria'].unique():
@@ -249,7 +304,7 @@ class StreamlitGQGenerator:
         
         # Create matplotlib figure
         plt.rcParams.update({
-            'font.size': 11,
+            'font.size': 14,
             'font.weight': 'bold',
             'axes.linewidth': 0.8,
             'axes.spines.left': True,
@@ -304,8 +359,11 @@ class StreamlitGQGenerator:
         self._create_legend(fig)
         
         # Add explanatory text below the charts
-        fig.text(0.5, 0.0001, 'Charts show top 8 scoring criteria for each vendor', 
-                fontsize=10, ha='center', va='bottom',
+        explanatory_text = 'Charts show top scoring criteria for each vendor'
+        if vendor in self.non_participation_vendors:
+            explanatory_text += '  |  Note: Vendor did not participate in the GQ'
+        fig.text(0.5, 0.0001, explanatory_text,
+                fontsize=12, ha='center', va='bottom',
                 color=self.colors['text_secondary'], style='italic', fontproperties=self.custom_font, weight='bold')
         
         plt.tight_layout()
@@ -327,33 +385,24 @@ class StreamlitGQGenerator:
         for i, item in enumerate(data):
             y_pos = y_positions[i]
             
-            # Background range
+            # Background range bar shows field min/max
             range_width = item['max_score'] - item['min_score']
             if range_width > 0:
                 range_rect = patches.Rectangle(
                     (item['min_score'], y_pos - 0.12), range_width, 0.24,
-                    facecolor=self.colors['range_bg'], edgecolor='none', alpha=0.6, zorder=1
+                    facecolor=self.colors['range_bg'], edgecolor='none', zorder=1
                 )
                 ax.add_patch(range_rect)
-            
-            # Min/max markers
-            marker_height = 0.08
-            ax.plot([item['min_score'], item['min_score']], 
-                   [y_pos - marker_height, y_pos + marker_height],
-                   color=self.colors['field_markers'], linewidth=2, zorder=3)
-            ax.plot([item['max_score'], item['max_score']], 
-                   [y_pos - marker_height, y_pos + marker_height],
-                   color=self.colors['field_markers'], linewidth=2, zorder=3)
-            
+
             # Vendor score (plot all scores including 0)
-            ax.scatter([item['vendor_score']], [y_pos], s=135, c=dot_color,
+            ax.scatter([item['vendor_score']], [y_pos], s=200, c=dot_color,
                       edgecolors=dot_color, linewidths=1.5, alpha=1, zorder=4)
         
         # Configure axes
         ax.set_xticks([0, 1, 2, 3])
-        ax.set_xticklabels(['0', '1', '2', '3'], fontsize=10, 
+        ax.set_xticklabels(['0', '1', '2', '3'], fontsize=13,
                           color=self.colors['text_secondary'], fontproperties=self.custom_font, weight='bold')
-        ax.set_xlabel('Criteria-level score', fontsize=11, 
+        ax.set_xlabel('Criteria-level score', fontsize=14,
                      color=self.colors['text_primary'], labelpad=8, fontproperties=self.custom_font, weight='bold')
         
         # Y-axis labels
@@ -410,11 +459,11 @@ class StreamlitGQGenerator:
                 y_labels.append(criteria)
         
         ax.set_yticks(y_positions)
-        ax.set_yticklabels(y_labels, fontsize=12, ha='right',
+        ax.set_yticklabels(y_labels, fontsize=15, ha='right',
                           color=self.colors['text_primary'], fontproperties=self.custom_font, weight='bold')
-        ax.set_title(chart_type, fontsize=13, fontweight='bold',
-                    color=self.colors['text_primary'], 
-                    pad=15, 
+        ax.set_title(chart_type, fontsize=14, fontweight='bold',
+                    color=self.colors['text_primary'],
+                    pad=15,
                     fontproperties=self.custom_font)
         
         # Style spines
@@ -429,13 +478,13 @@ class StreamlitGQGenerator:
     
     def _create_empty_chart(self, ax, chart_type):
         """Create empty chart placeholder"""
-        ax.text(0.5, 0.5, f'No {chart_type} data available', 
+        ax.text(0.5, 0.5, f'No {chart_type} data available',
                transform=ax.transAxes, ha='center', va='center',
-               fontsize=12, color=self.colors['text_secondary'],
+               fontsize=15, color=self.colors['text_secondary'],
                style='italic', fontproperties=self.custom_font, weight='bold')
         ax.set_xlim(0, 3)
         ax.set_ylim(0, 1)
-        ax.set_title(chart_type, fontsize=13, fontweight='bold',
+        ax.set_title(chart_type, fontsize=14, fontweight='bold',
                     color=self.colors['text_primary'], pad=15, fontproperties=self.custom_font)
         for spine in ax.spines.values():
             spine.set_visible(False)
@@ -446,15 +495,14 @@ class StreamlitGQGenerator:
         """Create legend"""
         legend_elements = [
             patches.Patch(facecolor=self.colors['range_bg'], edgecolor='none', label='Field range'),
-            Line2D([0], [0], marker='|', color=self.colors['field_line'], lw=0,markersize=10, label='Field min/max'),
             Line2D([0], [0], marker='o', color='w', label='Capabilities',
-                   markerfacecolor=self.colors['capabilities'], markersize=10, lw=0),
+                   markerfacecolor=self.colors['capabilities'], markersize=12, lw=0),
             Line2D([0], [0], marker='o', color='w', label='Momentum',
-                   markerfacecolor=self.colors['momentum'], markersize=10, lw=0),
+                   markerfacecolor=self.colors['momentum'], markersize=12, lw=0),
         ]
-        
+
         leg = fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.87),
-                  ncol=4, frameon=False, fontsize=10)
+                  ncol=3, frameon=False, fontsize=13)
         for text in leg.get_texts():
             text.set_fontproperties(self.custom_font)
             text.set_weight('bold')
