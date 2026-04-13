@@ -327,7 +327,7 @@ class StreamlitGQGenerator:
         title_height = 0.12
         legend_height = 0.08
         margin_top = 0.05
-        margin_bottom = 0.08
+        margin_bottom = 0.14
         chart_height = 1 - title_height - legend_height - margin_top - margin_bottom
         
         # Main title
@@ -359,12 +359,15 @@ class StreamlitGQGenerator:
         self._create_legend(fig)
         
         # Add explanatory text below the charts
-        explanatory_text = 'Charts show top scoring criteria for each vendor'
-        if vendor in self.non_participation_vendors:
-            explanatory_text += '  |  Note: Vendor did not participate in the GQ'
-        fig.text(0.5, 0.0001, explanatory_text,
+        fig.text(0.5, 0.04, 'Charts show top scoring criteria for each vendor',
                 fontsize=12, ha='center', va='bottom',
                 color=self.colors['text_secondary'], style='italic', fontproperties=self.custom_font, weight='bold')
+
+        # Add non-participation note on separate line if applicable
+        if vendor in self.non_participation_vendors:
+            fig.text(0.5, 0.01, 'Note: Vendor did not participate in the GQ',
+                    fontsize=11, ha='center', va='bottom',
+                    color=self.colors['text_secondary'], style='italic', fontproperties=self.custom_font, weight='bold')
         
         plt.tight_layout()
         return fig
