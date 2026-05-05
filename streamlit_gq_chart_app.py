@@ -360,13 +360,13 @@ class StreamlitGQGenerator:
         
         # Add explanatory text below the charts
         fig.text(0.5, 0.04, 'Charts show top scoring criteria for each vendor',
-                fontsize=12, ha='center', va='bottom',
+                fontsize=14, ha='center', va='bottom',
                 color=self.colors['text_secondary'], style='italic', fontproperties=self.custom_font, weight='bold')
 
         # Add non-participation note on separate line if applicable
         if vendor in self.non_participation_vendors:
             fig.text(0.5, 0.01, 'Note: Vendor did not participate in the GQ',
-                    fontsize=11, ha='center', va='bottom',
+                    fontsize=13, ha='center', va='bottom',
                     color=self.colors['text_secondary'], style='italic', fontproperties=self.custom_font, weight='bold')
         
         plt.tight_layout()
@@ -403,9 +403,9 @@ class StreamlitGQGenerator:
         
         # Configure axes
         ax.set_xticks([0, 1, 2, 3])
-        ax.set_xticklabels(['0', '1', '2', '3'], fontsize=13,
+        ax.set_xticklabels(['0', '1', '2', '3'], fontsize=15,
                           color=self.colors['text_secondary'], fontproperties=self.custom_font, weight='bold')
-        ax.set_xlabel('Criteria-level score', fontsize=14,
+        ax.set_xlabel('Criteria-level score', fontsize=16,
                      color=self.colors['text_primary'], labelpad=8, fontproperties=self.custom_font, weight='bold')
         
         # Y-axis labels
@@ -462,9 +462,9 @@ class StreamlitGQGenerator:
                 y_labels.append(criteria)
         
         ax.set_yticks(y_positions)
-        ax.set_yticklabels(y_labels, fontsize=15, ha='right',
+        ax.set_yticklabels(y_labels, fontsize=17, ha='right',
                           color=self.colors['text_primary'], fontproperties=self.custom_font, weight='bold')
-        ax.set_title(chart_type, fontsize=14, fontweight='bold',
+        ax.set_title(chart_type, fontsize=18, fontweight='bold',
                     color=self.colors['text_primary'],
                     pad=15,
                     fontproperties=self.custom_font)
@@ -483,11 +483,11 @@ class StreamlitGQGenerator:
         """Create empty chart placeholder"""
         ax.text(0.5, 0.5, f'No {chart_type} data available',
                transform=ax.transAxes, ha='center', va='center',
-               fontsize=15, color=self.colors['text_secondary'],
+               fontsize=17, color=self.colors['text_secondary'],
                style='italic', fontproperties=self.custom_font, weight='bold')
         ax.set_xlim(0, 3)
         ax.set_ylim(0, 1)
-        ax.set_title(chart_type, fontsize=14, fontweight='bold',
+        ax.set_title(chart_type, fontsize=18, fontweight='bold',
                     color=self.colors['text_primary'], pad=15, fontproperties=self.custom_font)
         for spine in ax.spines.values():
             spine.set_visible(False)
@@ -505,7 +505,7 @@ class StreamlitGQGenerator:
         ]
 
         leg = fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.87),
-                  ncol=3, frameon=False, fontsize=13)
+                  ncol=3, frameon=False, fontsize=15)
         for text in leg.get_texts():
             text.set_fontproperties(self.custom_font)
             text.set_weight('bold')
