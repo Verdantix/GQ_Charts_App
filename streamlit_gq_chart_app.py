@@ -405,7 +405,7 @@ class StreamlitGQGenerator:
         ax.set_xticks([0, 1, 2, 3])
         ax.set_xticklabels(['0', '1', '2', '3'], fontsize=15,
                           color=self.colors['text_secondary'], fontproperties=self.custom_font, weight='bold')
-        ax.set_xlabel('Criteria-level score', fontsize=16,
+        ax.set_xlabel('Criteria-level score', fontsize=12,
                      color=self.colors['text_primary'], labelpad=8, fontproperties=self.custom_font, weight='bold')
         
         # Y-axis labels
@@ -505,7 +505,7 @@ class StreamlitGQGenerator:
         ]
 
         leg = fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.87),
-                  ncol=3, frameon=False, fontsize=15)
+                  ncol=3, frameon=False, fontsize=18)
         for text in leg.get_texts():
             text.set_fontproperties(self.custom_font)
             text.set_weight('bold')
