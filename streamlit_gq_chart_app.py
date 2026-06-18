@@ -4,6 +4,22 @@ Streamlit web app for GQ Chart Generator
 Run with: streamlit run streamlit_GQ_app.py
 """
 
+# IMPORTANT: Force matplotlib backend via environment variable BEFORE any imports
+# This is the most reliable way to ensure Agg backend on all platforms
+import os
+os.environ['MPLBACKEND'] = 'Agg'
+
+import matplotlib
+matplotlib.use('Agg')  # Belt and suspenders
+
+# Force consistent DPI and font scaling across all environments
+matplotlib.rcParams['figure.dpi'] = 150
+matplotlib.rcParams['savefig.dpi'] = 150
+
+# Windows renders fonts smaller than Linux - apply scale factor
+import sys
+FONT_SCALE = 1.4 if sys.platform == 'win32' else 1.0
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -97,10 +113,22 @@ class StreamlitGQGenerator:
                 self.data = pd.read_csv(uploaded_file)
             elif uploaded_file.name.lower().endswith(('.xlsx', '.xls')):
                 # Try to read 'OutputData' sheet first, skip first 2 rows
+                # Handle sheet names with trailing/leading whitespace
                 try:
-                    self.data = pd.read_excel(uploaded_file, sheet_name='OutputData', skiprows=2)
+                    xl = pd.ExcelFile(uploaded_file)
+                    output_sheet = None
+                    for sheet in xl.sheet_names:
+                        if sheet.strip().lower() == 'outputdata':
+                            output_sheet = sheet
+                            break
+
+                    if output_sheet:
+                        self.data = pd.read_excel(uploaded_file, sheet_name=output_sheet, skiprows=2)
+                    else:
+                        # If 'OutputData' sheet doesn't exist, read first sheet
+                        self.data = pd.read_excel(uploaded_file)
                 except ValueError:
-                    # If 'OutputData' sheet doesn't exist, read first sheet
+                    # If reading fails, try first sheet
                     self.data = pd.read_excel(uploaded_file)
             else:
                 raise ValueError("Unsupported file type. Please upload CSV or Excel file.")
@@ -259,8 +287,8 @@ class StreamlitGQGenerator:
         combinations.sort(key=lambda x: (x['vendor'], x['year']))
         return combinations
     
-    def process_axis_data(self, data, axis_types, selected_vendor):
-        """Process data for capabilities or momentum"""
+    def process_axis_data(self, data, axis_types, selected_vendor, swap_out=None, swap_in=None):
+        """Process data for capabilities or momentum, with optional swap for tie-breaking"""
         # Case-insensitive axis matching, handle NA values
         axis_types_lower = [a.lower() for a in axis_types]
         axis_data = data[data['axis'].fillna('').str.lower().isin(axis_types_lower)]
@@ -282,9 +310,73 @@ class StreamlitGQGenerator:
                 })
         
         criteria_stats.sort(key=lambda x: x['vendor_score'], reverse=True)
+
+        # Handle swap if specified (for tie-breaking)
+        if swap_out and swap_in:
+            # Find indices
+            swap_out_idx = None
+            swap_in_idx = None
+            for i, item in enumerate(criteria_stats):
+                if item['criteria'] == swap_out:
+                    swap_out_idx = i
+                if item['criteria'] == swap_in:
+                    swap_in_idx = i
+
+            # Only swap if both found and swap_out is in top N and swap_in is outside
+            if (swap_out_idx is not None and swap_in_idx is not None and
+                swap_out_idx < self.MAX_CRITERIA_DISPLAY and
+                swap_in_idx >= self.MAX_CRITERIA_DISPLAY):
+                # Swap positions
+                criteria_stats[swap_out_idx], criteria_stats[swap_in_idx] = \
+                    criteria_stats[swap_in_idx], criteria_stats[swap_out_idx]
+
         return criteria_stats[:self.MAX_CRITERIA_DISPLAY]
-    
-    def create_chart(self, vendor, year):
+
+    def get_all_criteria_sorted(self, data, axis_types, selected_vendor):
+        """Get all criteria sorted by vendor_score descending (no limit)."""
+        axis_types_lower = [a.lower() for a in axis_types]
+        axis_data = data[data['axis'].fillna('').str.lower().isin(axis_types_lower)]
+        criteria_stats = []
+
+        for criteria in axis_data['criteria'].unique():
+            criteria_data = axis_data[axis_data['criteria'] == criteria]
+            vendor_rows = criteria_data[criteria_data['vendor'] == selected_vendor]
+            vendor_score = vendor_rows['sum'].iloc[0] if len(vendor_rows) > 0 else 0
+            all_scores = criteria_data['sum'].tolist()
+
+            if all_scores:
+                criteria_stats.append({
+                    'criteria': criteria,
+                    'vendor_score': vendor_score,
+                    'min_score': min(all_scores),
+                    'max_score': max(all_scores),
+                    'axis': axis_types[0]
+                })
+
+        criteria_stats.sort(key=lambda x: x['vendor_score'], reverse=True)
+        return criteria_stats
+
+    def detect_ties_at_cutoff(self, all_criteria):
+        """Detect ties at the MAX_CRITERIA_DISPLAY cutoff position."""
+        if len(all_criteria) <= self.MAX_CRITERIA_DISPLAY:
+            return False, None, [], []
+
+        cutoff_idx = self.MAX_CRITERIA_DISPLAY - 1  # index 4 for top 5
+        cutoff_score = all_criteria[cutoff_idx]['vendor_score']
+        next_score = all_criteria[cutoff_idx + 1]['vendor_score']
+
+        if cutoff_score != next_score:
+            return False, None, [], []
+
+        # Find all criteria with the cutoff score
+        included_tied = [c['criteria'] for c in all_criteria[:self.MAX_CRITERIA_DISPLAY]
+                         if c['vendor_score'] == cutoff_score]
+        excluded_tied = [c['criteria'] for c in all_criteria[self.MAX_CRITERIA_DISPLAY:]
+                         if c['vendor_score'] == cutoff_score]
+
+        return True, cutoff_score, included_tied, excluded_tied
+
+    def create_chart(self, vendor, year, cap_swap=None, mom_swap=None):
         """Create chart and return matplotlib figure"""
         if self.data is None:
             raise ValueError("No data loaded")
@@ -296,8 +388,14 @@ class StreamlitGQGenerator:
         if vendor not in year_data['vendor'].unique():
             raise ValueError(f"Vendor '{vendor}' not found in {year} data")
         
-        capabilities_data = self.process_axis_data(year_data, ['Capabilities', 'Capability'], vendor)
-        momentum_data = self.process_axis_data(year_data, ['Momentum'], vendor)
+        # Extract swap parameters
+        cap_swap_out, cap_swap_in = cap_swap if cap_swap else (None, None)
+        mom_swap_out, mom_swap_in = mom_swap if mom_swap else (None, None)
+
+        capabilities_data = self.process_axis_data(year_data, ['Capabilities', 'Capability'], vendor,
+                                                   swap_out=cap_swap_out, swap_in=cap_swap_in)
+        momentum_data = self.process_axis_data(year_data, ['Momentum'], vendor,
+                                               swap_out=mom_swap_out, swap_in=mom_swap_in)
         
         if not capabilities_data and not momentum_data:
             raise ValueError(f"No capabilities or momentum data found for {vendor} in {year}")
@@ -360,7 +458,7 @@ class StreamlitGQGenerator:
         
         # Add explanatory text below the charts
         fig.text(0.5, 0.04, 'Charts show top scoring criteria for each vendor',
-                fontsize=14, ha='center', va='bottom',
+                fontsize=int(14 * FONT_SCALE), ha='center', va='bottom',
                 color=self.colors['text_secondary'], style='italic', fontproperties=self.custom_font, weight='bold')
 
         # Add non-participation note on separate line if applicable
@@ -515,6 +613,10 @@ if 'generator' not in st.session_state:
     st.session_state.generator = StreamlitGQGenerator()
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
+if 'cap_swap' not in st.session_state:
+    st.session_state.cap_swap = {}  # {(vendor, year): (swap_out, swap_in)}
+if 'mom_swap' not in st.session_state:
+    st.session_state.mom_swap = {}
 
 # Main App
 def main():
@@ -603,10 +705,67 @@ def main():
                 selected_vendor = st.selectbox("Select Vendor", vendors, key="single_vendor")
             with col2:
                 selected_year = st.selectbox("Select Year", years, key="single_year")
+
+            # Tie detection and swap UI
+            year_data = data[data['year'] == selected_year]
+            cap_swap = None
+            mom_swap = None
+
+            if selected_vendor in year_data['vendor'].unique():
+                # Check for ties in Capabilities
+                all_cap = st.session_state.generator.get_all_criteria_sorted(
+                    year_data, ['Capabilities', 'Capability'], selected_vendor)
+                cap_has_ties, cap_score, cap_included, cap_excluded = \
+                    st.session_state.generator.detect_ties_at_cutoff(all_cap)
+
+                if cap_has_ties and cap_excluded:
+                    st.markdown(f"**Capabilities:** Tied criteria at cutoff (score: {cap_score})")
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        cap_swap_out = st.selectbox(
+                            "Currently showing:",
+                            options=cap_included,
+                            key="cap_swap_out"
+                        )
+                    with col_b:
+                        cap_swap_in = st.selectbox(
+                            "Swap with:",
+                            options=["(no swap)"] + cap_excluded,
+                            key="cap_swap_in"
+                        )
+                    if cap_swap_in != "(no swap)":
+                        cap_swap = (cap_swap_out, cap_swap_in)
+
+                # Check for ties in Momentum
+                all_mom = st.session_state.generator.get_all_criteria_sorted(
+                    year_data, ['Momentum'], selected_vendor)
+                mom_has_ties, mom_score, mom_included, mom_excluded = \
+                    st.session_state.generator.detect_ties_at_cutoff(all_mom)
+
+                if mom_has_ties and mom_excluded:
+                    st.markdown(f"**Momentum:** Tied criteria at cutoff (score: {mom_score})")
+                    col_c, col_d = st.columns(2)
+                    with col_c:
+                        mom_swap_out = st.selectbox(
+                            "Currently showing:",
+                            options=mom_included,
+                            key="mom_swap_out"
+                        )
+                    with col_d:
+                        mom_swap_in = st.selectbox(
+                            "Swap with:",
+                            options=["(no swap)"] + mom_excluded,
+                            key="mom_swap_in"
+                        )
+                    if mom_swap_in != "(no swap)":
+                        mom_swap = (mom_swap_out, mom_swap_in)
+
             if st.button("Generate Single Chart", type="primary"):
                 try:
                     with st.spinner(f"Creating chart for {selected_vendor} ({selected_year})..."):
-                        fig = st.session_state.generator.create_chart(selected_vendor, selected_year)
+                        fig = st.session_state.generator.create_chart(
+                            selected_vendor, selected_year,
+                            cap_swap=cap_swap, mom_swap=mom_swap)
                         
                         # Display chart
                         st.pyplot(fig)
@@ -620,7 +779,7 @@ def main():
                             # PNG download
                             img_buffer = BytesIO()
                             fig.savefig(img_buffer, format='png', bbox_inches='tight', 
-                                       facecolor='white', dpi=300)
+                                       facecolor='white', dpi=150)
                             img_buffer.seek(0)
                             
                             st.download_button(
@@ -715,7 +874,7 @@ def main():
                                     # Save PNG to zip
                                     png_buffer = BytesIO()
                                     fig.savefig(png_buffer, format='png', bbox_inches='tight', 
-                                               facecolor='white', dpi=300)
+                                               facecolor='white', dpi=150)
                                     zip_file.writestr(f"png/{clean_vendor}_{year}_chart.png", png_buffer.getvalue())
                                     
                                     # Save SVG to zip
