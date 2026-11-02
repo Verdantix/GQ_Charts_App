@@ -81,6 +81,41 @@ html, body, [class*='css'], .stApp, .stTextInput, .stButton, .stSelectbox, .stDa
 </style>
 """, unsafe_allow_html=True)
 
+def sentence_case_criteria(criteria):
+    """Sentence-case a criteria label, preserving acronyms."""
+    # Smart case processing - preserve acronyms, sentence case for others
+    words = criteria.split(' ')
+    processed_words = []
+    # Common acronyms to preserve
+    acronyms = {'API', 'APIs', 'UI', 'UX', 'AI', 'ML', 'IT', 'CRM', 'ERP', 'ROI', 'KPI', 'SaaS', 'IoT', 'SDK', 'REST'}
+
+    for i, word in enumerate(words):
+        # Check if word contains hyphens (e.g., "AI-First")
+        if '-' in word:
+            # Process each part of hyphenated word separately
+            parts = word.split('-')
+            processed_parts = []
+            for j, part in enumerate(parts):
+                if part.isupper() or (len(part) <= 3 and part.isalpha()) or part in acronyms:
+                    processed_parts.append(part)  # Keep acronyms as-is
+                else:
+                    # Apply lowercase to non-acronyms in hyphenated words
+                    processed_parts.append(part.lower())
+            processed_words.append('-'.join(processed_parts))
+        # Check if word is likely an acronym (all caps, 2-3 letters, or in our acronym list)
+        elif word.isupper() or (len(word) <= 3 and word.isalpha()) or word in acronyms:
+            processed_words.append(word)  # Keep acronyms as-is
+        else:
+            # Apply sentence case to non-acronyms (first letter only if it's the first word)
+            if i == 0:
+                processed_words.append(word[0].upper() + word[1:].lower())
+            else:
+                processed_words.append(word.lower())
+    label = ' '.join(processed_words)
+    # The label always starts with a capital, even when its first word is hyphenated or short
+    return label[0].upper() + label[1:]
+
+
 class StreamlitGQGenerator:
     def __init__(self):
         self.data = None
@@ -511,35 +546,7 @@ class StreamlitGQGenerator:
         for item in data:
             criteria = item['criteria'].strip()
             if criteria:
-                # Smart case processing - preserve acronyms, sentence case for others
-                words = criteria.split(' ')
-                processed_words = []
-                # Common acronyms to preserve
-                acronyms = {'API', 'APIs', 'UI', 'UX', 'AI', 'ML', 'IT', 'CRM', 'ERP', 'ROI', 'KPI', 'SaaS', 'IoT', 'SDK', 'REST'}
-
-                for i, word in enumerate(words):
-                    # Check if word contains hyphens (e.g., "AI-First")
-                    if '-' in word:
-                        # Process each part of hyphenated word separately
-                        parts = word.split('-')
-                        processed_parts = []
-                        for j, part in enumerate(parts):
-                            if part.isupper() or (len(part) <= 3 and part.isalpha()) or part in acronyms:
-                                processed_parts.append(part)  # Keep acronyms as-is
-                            else:
-                                # Apply lowercase to non-acronyms in hyphenated words
-                                processed_parts.append(part.lower())
-                        processed_words.append('-'.join(processed_parts))
-                    # Check if word is likely an acronym (all caps, 2-3 letters, or in our acronym list)
-                    elif word.isupper() or (len(word) <= 3 and word.isalpha()) or word in acronyms:
-                        processed_words.append(word)  # Keep acronyms as-is
-                    else:
-                        # Apply sentence case to non-acronyms (first letter only if it's the first word)
-                        if i == 0:
-                            processed_words.append(word[0].upper() + word[1:].lower())
-                        else:
-                            processed_words.append(word.lower())
-                criteria = ' '.join(processed_words)
+                criteria = sentence_case_criteria(criteria)
             criteria = criteria.replace(' and ', ' & ')
             if len(criteria) > 20:
                 words = criteria.split(' ')
